@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Run Ledger</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23121614'/%3E%3Cpath d='M3 4h2v8H3zM7 8h2v4H7zM11 6h2v6h-2z' fill='%23e2a04a'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #121614;
+    --raised: #1a211c;
+    --inset: #0c0f0d;
+    --line: rgba(239, 231, 214, 0.14);
+    --text: #efe7d6;
+    --muted: #b3a790;
+    --faint: #7e7566;
+    --amber: #e2a04a;
+    --ink: #2a1c08;
+    --green: #7dcaa0;
+    --red: #e07a62;
+    --blue: #8eb7d4;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", "Sarasa Mono SC", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-end;
+    padding: 20px 28px 16px;
+    border-bottom: 1px solid var(--line);
+    box-shadow: inset 0 -2px 0 rgba(226, 160, 74, 0.45);
+    background: linear-gradient(180deg, rgba(226, 160, 74, 0.07), transparent 72%);
+  }
+  .brand { display: flex; gap: 12px; align-items: center; }
+  .mark {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--inset);
+    border: 1px solid var(--line);
+    position: relative;
+  }
+  .mark::before, .mark::after {
+    content: "";
+    position: absolute;
+    bottom: 7px;
+    width: 4px;
+    background: var(--amber);
+    border-radius: 1px;
+  }
+  .mark::before { left: 9px; height: 16px; }
+  .mark::after { left: 16px; height: 9px; box-shadow: 7px -4px 0 var(--amber); }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 30px;
+    letter-spacing: -0.03em;
+    margin: 0;
+    line-height: 1;
+  }
+  .tag { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+  .machine { text-align: right; color: var(--muted); font-size: 13px; }
+  .machine strong { color: var(--text); font-weight: 600; }
+  #loaderr {
+    color: var(--red);
+    margin: 6px 0 0;
+  }
+  .shell {
+    display: grid;
+    grid-template-columns: 320px minmax(0, 1fr);
+    min-height: calc(100vh - 86px);
+  }
+  aside {
+    background: #151b17;
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+  }
+  .aside-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--faint);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .filters { display: flex; gap: 4px; }
+  #runlist { overflow: auto; flex: 1; min-height: 140px; }
+  button.run {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    color: inherit;
+    padding: 12px 14px 11px;
+    cursor: pointer;
+    overflow: hidden;
+    min-width: 0;
+    max-width: 100%;
+  }
+  button.run:hover { background: rgba(239, 231, 214, 0.03); }
+  button.run.active {
+    background: rgba(226, 160, 74, 0.08);
+    box-shadow: inset 3px 0 0 var(--amber);
+  }
+  .run-top, .run-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .run-id { font-family: var(--mono); color: var(--amber); font-size: 12px; }
+  .run-status { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .run-status.success { color: var(--green); }
+  .run-status.failed, .run-status.interrupted { color: var(--red); }
+  .run-status.running { color: var(--amber); }
+  .cmd {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    margin: 6px 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .run-meta { color: var(--faint); font-size: 12px; }
+  .bar { height: 3px; background: #2a332e; border-radius: 99px; margin-top: 8px; }
+  .bar > span { display: block; height: 100%; border-radius: 99px; background: var(--amber); }
+  .bar.success > span { background: var(--green); }
+  .bar.failed > span, .bar.interrupted > span { background: var(--red); }
+  .dot {
+    width: 7px; height: 7px; border-radius: 99px; display: inline-block;
+    background: currentColor; margin-right: 5px;
+  }
+  .running .dot { animation: pulse 1.6s infinite; }
+  @keyframes pulse {
+    70% { box-shadow: 0 0 0 6px rgba(226, 160, 74, 0); }
+  }
+  #hook {
+    border-top: 1px solid var(--line);
+    padding: 14px 14px 16px;
+  }
+  #hook h2 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .hint, #formatHint, #hookmsg { color: var(--faint); font-size: 12.5px; margin: 0 0 8px; }
+  #hookmsg { color: var(--muted); min-height: 1.2em; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  input, select, button { font: inherit; color: var(--text); }
+  input, select {
+    width: 100%;
+    margin-top: 4px;
+    background: var(--inset);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  input:focus, select:focus, button:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 1px;
+  }
+  .hook-actions { display: flex; gap: 8px; }
+  button {
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  button.primary, #hook button[type="submit"] {
+    background: var(--amber);
+    color: var(--ink);
+    border-color: transparent;
+    font-weight: 650;
+  }
+  button.chip.on { color: var(--amber); border-color: var(--amber); }
+  main { padding: 22px 28px 48px; min-width: 0; max-width: 100%; }
+  .empty { max-width: 640px; padding-top: 28px; }
+  .kicker {
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--amber);
+    font-size: 12px;
+    margin: 0 0 8px;
+  }
+  .empty h2, .detail h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    font-size: 36px;
+    margin: 0 0 10px;
+    line-height: 1.1;
+  }
+  .detail h2 { font-family: var(--mono); font-size: 18px; font-weight: 450; line-height: 1.45; }
+  pre.example {
+    background: var(--inset);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    overflow: auto;
+  }
+  code, pre { font-family: var(--mono); font-size: 13px; }
+  .headrow { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .pill {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .pill.success { color: var(--green); }
+  .pill.failed, .pill.interrupted { color: var(--red); }
+  .pill.running { color: var(--amber); }
+  .meta { color: var(--muted); font-size: 13.5px; margin: 8px 0; }
+  .banner {
+    border: 1px solid var(--line);
+    background: rgba(226, 160, 74, 0.08);
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-size: 13.5px;
+  }
+  .banner.measured { background: rgba(125, 202, 160, 0.08); }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+  }
+  .stat {
+    background: var(--inset);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px 10px;
+  }
+  .stat b {
+    display: block;
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+  }
+  .stat span {
+    color: var(--faint);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .chart-wrap {
+    background: var(--inset);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 6px 6px 2px;
+  }
+  svg.chart { width: 100%; height: auto; display: block; }
+  .readout { color: var(--muted); font-family: var(--mono); font-size: 12px; min-height: 1.3em; margin: 6px 2px 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 12px; margin: 8px 4px 0; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 99px; margin-right: 6px; vertical-align: -1px; }
+  .log {
+    background: var(--inset);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    min-height: 96px;
+    max-height: 280px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .quiet { color: var(--faint); }
+  .empty-list { color: var(--faint); padding: 16px 14px; font-size: 13px; }
+  @media (max-width: 860px) {
+    header { padding: 16px; align-items: flex-start; flex-direction: column; }
+    .machine { text-align: left; }
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); }
+    #runlist { max-height: 40vh; }
+    main { padding: 16px 16px 40px; }
+    .stats { grid-template-columns: 1fr 1fr; }
+    .headrow { flex-direction: column; }
+    .pills { justify-content: flex-start; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .running .dot { animation: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="mark" aria-hidden="true"></div>
+    <div>
+      <h1>Run Ledger</h1>
+      <p class="tag">Flight recorder for the GPU on your desk</p>
+    </div>
+  </div>
+  <div class="machine">
+    <div id="machine">Local only</div>
+    <p id="loaderr" hidden></p>
+  </div>
+</header>
+<div class="shell">
+  <aside>
+    <div class="aside-head">
+      <span>Runs</span>
+      <div class="filters">
+        <button type="button" class="chip on" data-filter="all">All</button>
+        <button type="button" class="chip" data-filter="running">Live</button>
+        <button type="button" class="chip" data-filter="failed">Failed</button>
+      </div>
+    </div>
+    <div id="runlist"></div>
+    <form id="hook">
+      <h2>Webhook</h2>
+      <p class="hint">Optional. One POST when a job finishes or crashes. Nothing leaves this machine until you save a URL.</p>
+      <label>URL
+        <input name="webhook_url" autocomplete="off" spellcheck="false" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...">
+      </label>
+      <label>Format
+        <select name="webhook_format">
+          <option value="generic">Generic JSON</option>
+          <option value="wecom">WeCom · 企业微信</option>
+          <option value="dingtalk">DingTalk · 钉钉</option>
+          <option value="feishu">Feishu · 飞书</option>
+        </select>
+      </label>
+      <p id="formatHint"></p>
+      <label>When
+        <select name="notify_on">
+          <option value="both">Finish and crash</option>
+          <option value="finish">Finish only</option>
+          <option value="crash">Crash only</option>
+        </select>
+      </label>
+      <div class="hook-actions">
+        <button type="submit">Save</button>
+        <button type="button" id="ping">Send test</button>
+      </div>
+      <p id="hookmsg" role="status"></p>
+    </form>
+  </aside>
+  <main id="main">
+    <p class="quiet">Reading the ledger…</p>
+  </main>
+</div>
+<noscript>
+  <p style="padding:16px">Run Ledger’s page needs JavaScript. It does not load anything from the network.</p>
+</noscript>
+<script>
+const METRIC = {
+  vram: { label: "VRAM", color: "#8eb7d4", unit: "GB", pick: (s) => s.vram_used_mb == null ? null : s.vram_used_mb / 1024 },
+  power: { label: "Power", color: "#e2a04a", unit: "W", pick: (s) => s.power_w },
+  temp: { label: "Temp", color: "#e07a62", unit: "°C", pick: (s) => s.temp_c },
+  util: { label: "Util", color: "#7dcaa0", unit: "%", pick: (s) => s.util_pct }
+};
+const HINTS = {
+  generic: "JSON body with the event, command, exit code, duration, and peaks.",
+  wecom: "企业微信 markdown bot. Paste the group robot URL.",
+  dingtalk: "钉钉 markdown bot. The title includes “Run Ledger” for keyword checks.",
+  feishu: "飞书 interactive card. The custom bot must allow card messages."
+};
+const state = {
+  runs: [],
+  meta: null,
+  selectedId: null,
+  metric: "vram",
+  log: "stdout",
+  filter: "all",
+  gpu: 0,
+  detail: null,
+  ticking: false
+};
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+function fmtDuration(sec) {
+  if (sec == null || Number.isNaN(sec)) return "—";
+  sec = Math.max(0, Math.round(sec));
+  if (sec < 60) return sec + "s";
+  const minutes = Math.floor(sec / 60);
+  const seconds = sec % 60;
+  if (minutes < 60) return minutes + "m " + String(seconds).padStart(2, "0") + "s";
+  const hours = Math.floor(minutes / 60);
+  return hours + "h " + String(minutes % 60).padStart(2, "0") + "m";
+}
+function fmtAgo(iso) {
+  if (!iso) return "";
+  const delta = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (!Number.isFinite(delta)) return "";
+  if (delta < 45) return "just now";
+  if (delta < 3600) return Math.round(delta / 60) + " min ago";
+  if (delta < 86400) return Math.round(delta / 3600) + " h ago";
+  return Math.round(delta / 86400) + " d ago";
+}
+function fmtWhen(iso) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function fmtGb(mb) {
+  if (mb == null) return "—";
+  return (mb / 1024).toFixed(1) + " GB";
+}
+function fmtPeak(value, suffix) {
+  if (value == null) return "—";
+  if (suffix === "W" || suffix === "°C" || suffix === "%") return Math.round(value) + (suffix === "°C" ? "°C" : " " + suffix).replace(" %", "%");
+  return String(value);
+}
+function statusWord(status) {
+  if (status === "success") return "success";
+  if (status === "running") return "running";
+  if (status === "interrupted") return "interrupted";
+  return "failed";
+}
+function visibleRuns() {
+  if (state.filter === "running") return state.runs.filter((run) => run.status === "running");
+  if (state.filter === "failed") return state.runs.filter((run) => run.status === "failed" || run.status === "interrupted");
+  return state.runs;
+}
+function banner(run) {
+  if (run.origin === "seed") {
+    return { cls: "", text: "Simulated example. The command, logs, and curve were generated by runledger demo so this page can be shown without a GPU. Not a measurement." };
+  }
+  if (run.sampler === "demo") {
+    return { cls: "", text: "This curve is simulated. nvidia-smi was not available, so the shape is a demo. The command, exit code, and log tail are real." };
+  }
+  return { cls: "measured", text: "Measured with nvidia-smi on this machine." };
+}
+
+function renderMeta() {
+  const meta = state.meta;
+  const node = document.getElementById("machine");
+  if (!meta) { node.textContent = "Local only"; return; }
+  const sampler = meta.nvidia_smi ? "nvidia-smi on PATH" : "demo sampler · nvidia-smi not found";
+  node.innerHTML = "<strong>" + esc(meta.hostname) + "</strong><br>" + esc(meta.platform) + " · " + esc(sampler);
+}
+function renderList() {
+  const list = document.getElementById("runlist");
+  const scroll = list.scrollTop;
+  const runs = visibleRuns();
+  if (!runs.length) {
+    list.innerHTML = '<div class="empty-list">' + (state.runs.length ? "Nothing in this filter." : "No runs yet.") + "</div>";
+    return;
+  }
+  const maxDur = Math.max(1, ...runs.map((run) => run.duration_sec || 0));
+  list.innerHTML = runs.map((run) => {
+    const width = Math.max(6, ((run.duration_sec || 0) / maxDur) * 100);
+    const active = run.id === state.selectedId ? " active" : "";
+    const kind = statusWord(run.status);
+    const when = run.status === "running" ? "live" : fmtAgo(run.ended_at || run.started_at);
+    return '<button type="button" class="run' + active + '" data-id="' + run.id + '">' +
+      '<div class="run-top"><span class="run-id">#' + run.id + '</span>' +
+      '<span class="run-status ' + kind + '"><span class="dot"></span>' + esc(kind) + '</span></div>' +
+      '<div class="cmd">' + esc(run.command) + '</div>' +
+      '<div class="run-meta"><span>' + esc(fmtDuration(run.duration_sec)) + ' · ' + esc(when) + '</span>' +
+      '<span>' + esc(fmtGb(run.peak_vram_mb)) + '</span></div>' +
+      '<div class="bar ' + kind + '"><span style="width:' + width.toFixed(1) + '%"></span></div>' +
+      '</button>';
+  }).join("");
+  list.scrollTop = scroll;
+}
+function renderEmpty() {
+  document.title = "Run Ledger";
+  document.getElementById("main").innerHTML =
+    '<div class="empty">' +
+    '<p class="kicker">No runs on this machine</p>' +
+    '<h2>Nothing recorded yet.</h2>' +
+    '<p>Prefix the command you were already going to run. The exit code, the last lines, and a GPU curve will be here when you come back.</p>' +
+    '<pre class="example"><code>runledger -- python train_lora.py</code></pre>' +
+    '<p class="quiet">Or load labeled examples with <code>runledger demo</code>. Those stay badged as simulated.</p>' +
+    '</div>';
+}
+function domain(key, rows) {
+  if (key === "vram") {
+    const total = rows.reduce((max, row) => Math.max(max, row.vram_total_mb || 0), 0);
+    return [0, (total || 24564) / 1024];
+  }
+  if (key === "power") {
+    const peak = rows.reduce((max, row) => Math.max(max, row.power_w || 0), 0);
+    return [0, Math.max(450, peak * 1.08)];
+  }
+  return [0, 100];
+}
+function chartSvg(rows, metric) {
+  const width = 720, height = 248;
+  const pad = { l: 54, r: 16, t: 16, b: 32 };
+  const innerW = width - pad.l - pad.r;
+  const innerH = height - pad.t - pad.b;
+  if (!rows.length) {
+    return '<svg class="chart" viewBox="0 0 720 248" role="img" aria-label="No samples"><text x="54" y="120" fill="#7e7566" font-size="14">No samples stored for this run.</text></svg>';
+  }
+  const keys = metric === "all" ? ["vram", "power", "temp", "util"] : [metric];
+  function xy(index, value, min, max) {
+    const x = pad.l + (rows.length === 1 ? innerW / 2 : (index / (rows.length - 1)) * innerW);
+    const span = max - min || 1;
+    const y = pad.t + innerH - ((value - min) / span) * innerH;
+    return [x, y];
+  }
+  let body = "";
+  for (let tick = 0; tick < 4; tick++) {
+    const y = pad.t + (innerH / 3) * tick;
+    body += '<line x1="' + pad.l + '" y1="' + y.toFixed(1) + '" x2="' + (width - pad.r) + '" y2="' + y.toFixed(1) + '" stroke="rgba(239,231,214,0.08)" />';
+  }
+  if (metric !== "all") {
+    const spec = METRIC[metric];
+    const [min, max] = domain(metric, rows);
+    for (let tick = 0; tick < 4; tick++) {
+      const value = max - ((max - min) / 3) * tick;
+      const y = pad.t + (innerH / 3) * tick;
+      const label = metric === "vram" ? value.toFixed(0) : Math.round(value);
+      body += '<text x="8" y="' + (y + 4).toFixed(1) + '" fill="#7e7566" font-size="11">' + label + '</text>';
+    }
+    const pts = [];
+    rows.forEach((row, index) => {
+      const value = spec.pick(row);
+      if (value == null) return;
+      pts.push(xy(index, value, min, max));
+    });
+    if (pts.length) {
+      const line = pts.map((p) => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+      const area = pad.l + "," + (pad.t + innerH) + " " + line + " " + pts[pts.length - 1][0].toFixed(1) + "," + (pad.t + innerH);
+      body += '<polygon points="' + area + '" fill="' + spec.color + '" opacity="0.16" />';
+      body += '<polyline points="' + line + '" fill="none" stroke="' + spec.color + '" stroke-width="2" />';
+      if (pts.length < 4) {
+        pts.forEach((p) => {
+          body += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3.5" fill="' + spec.color + '" />';
+        });
+      }
+    }
+  } else {
+    keys.forEach((key) => {
+      const spec = METRIC[key];
+      const [min, max] = domain(key, rows);
+      const line = [];
+      rows.forEach((row, index) => {
+        const value = spec.pick(row);
+        if (value == null) return;
+        const p = xy(index, value, min, max);
+        line.push(p[0].toFixed(1) + "," + p[1].toFixed(1));
+      });
+      if (line.length) {
+        body += '<polyline points="' + line.join(" ") + '" fill="none" stroke="' + spec.color + '" stroke-width="2" />';
+      }
+    });
+  }
+  const start = fmtWhen(rows[0].ts).split(", ").pop();
+  const end = fmtWhen(rows[rows.length - 1].ts).split(", ").pop();
+  body += '<text x="' + pad.l + '" y="' + (height - 8) + '" fill="#7e7566" font-size="11">' + esc(start) + '</text>';
+  body += '<text x="' + (width - pad.r) + '" y="' + (height - 8) + '" fill="#7e7566" font-size="11" text-anchor="end">' + esc(end) + '</text>';
+  const label = metric === "all" ? "All series, each scaled to its own range" : METRIC[metric].label + " (" + METRIC[metric].unit + ")";
+  return '<svg class="chart" viewBox="0 0 720 248" role="img" aria-label="' + esc(label) + '">' + body + '</svg>';
+}
+function readoutText(rows, metric) {
+  if (!rows.length) return "No samples.";
+  const last = rows[rows.length - 1];
+  if (metric === "all") {
+    return rows.length + " samples · last " +
+      fmtGb(last.vram_used_mb) + " · " +
+      (last.power_w == null ? "—" : Math.round(last.power_w) + " W") + " · " +
+      (last.temp_c == null ? "—" : Math.round(last.temp_c) + "°C") + " · " +
+      (last.util_pct == null ? "—" : Math.round(last.util_pct) + "%");
+  }
+  const spec = METRIC[metric];
+  const value = spec.pick(last);
+  const shown = value == null ? "—" : (metric === "vram" ? value.toFixed(1) : Math.round(value)) + " " + spec.unit;
+  return rows.length + " samples · last " + shown + " · " + fmtWhen(last.ts);
+}
+function renderDetail(detail) {
+  if (!detail || !detail.run) return;
+  const run = detail.run;
+  const rows = detail.samples.filter((sample) => sample.gpu_index === state.gpu);
+  const usedRows = rows.length ? rows : detail.samples;
+  document.title = "Run Ledger · #" + run.id + " " + statusWord(run.status);
+  const note = banner(run);
+  const kind = statusWord(run.status);
+  const tabs = ["vram", "power", "temp", "util", "all"].map((key) => {
+    const on = state.metric === key ? " on" : "";
+    const label = key === "all" ? "All" : METRIC[key].label;
+    return '<button type="button" class="chip' + on + '" data-metric="' + key + '">' + label + '</button>';
+  }).join("");
+  const gpuChoices = (detail.gpus || []).length > 1
+    ? '<label class="quiet">GPU <select id="gpu">' + detail.gpus.map((gpu) =>
+        '<option value="' + gpu + '"' + (gpu === state.gpu ? " selected" : "") + '>GPU ' + gpu + '</option>'
+      ).join("") + '</select></label>'
+    : "";
+  const logText = state.log === "stderr" ? (run.stderr_tail || "") : (run.stdout_tail || "");
+  const webhook = run.webhook_status
+    ? '<div class="meta">Webhook ' + esc(run.webhook_status) + (run.webhook_error ? " — " + esc(run.webhook_error) : "") + '</div>'
+    : "";
+  const power = run.peak_power_w == null ? "—" : Math.round(run.peak_power_w) + " W";
+  const temp = run.peak_temp_c == null ? "—" : Math.round(run.peak_temp_c) + "°C";
+  const util = run.peak_util_pct == null ? "—" : Math.round(run.peak_util_pct) + "%";
+  document.getElementById("main").innerHTML =
+    '<article class="detail">' +
+    '<div class="headrow"><h2>' + esc(run.command) + '</h2>' +
+    '<div class="pills"><span class="pill ' + kind + '">' + esc(kind) + (run.exit_code == null ? "" : " · exit " + esc(run.exit_code)) + '</span>' +
+    '<span class="pill">' + (run.origin === "seed" ? "Simulated example" : (run.sampler === "demo" ? "Demo sampler" : "Measured")) + '</span></div></div>' +
+    '<p class="meta">' + esc(fmtWhen(run.started_at)) + ' → ' + (run.ended_at ? esc(fmtWhen(run.ended_at)) : "still running") +
+    ' · ' + esc(fmtDuration(run.duration_sec)) +
+    (run.cwd ? ' · ' + esc(run.cwd) : "") +
+    (run.gpu_name ? ' · ' + esc(run.gpu_name) : "") + '</p>' +
+    '<div class="banner ' + note.cls + '">' + esc(note.text) + '</div>' +
+    '<div class="stats">' +
+    '<div class="stat"><b>' + esc(fmtGb(run.peak_vram_mb)) + '</b><span>Peak VRAM</span></div>' +
+    '<div class="stat"><b>' + esc(power) + '</b><span>Peak power</span></div>' +
+    '<div class="stat"><b>' + esc(temp) + '</b><span>Peak temp</span></div>' +
+    '<div class="stat"><b>' + esc(util) + '</b><span>Peak util</span></div>' +
+    '</div>' +
+    '<div class="tabs">' + tabs + gpuChoices + '</div>' +
+    '<div class="chart-wrap">' + chartSvg(usedRows, state.metric) + '</div>' +
+    (state.metric === "all"
+      ? '<div class="legend">' +
+        ["vram", "power", "temp", "util"].map((key) =>
+          '<span><i style="background:' + METRIC[key].color + '"></i>' + METRIC[key].label + '</span>'
+        ).join("") + '</div>'
+      : "") +
+    '<div class="readout" id="readout">' + esc(readoutText(usedRows, state.metric)) + '</div>' +
+    '<div class="tabs">' +
+    '<button type="button" class="chip' + (state.log === "stdout" ? " on" : "") + '" data-log="stdout">stdout</button>' +
+    '<button type="button" class="chip' + (state.log === "stderr" ? " on" : "") + '" data-log="stderr">stderr</button>' +
+    '</div>' +
+    '<pre class="log">' + (logText ? esc(logText) : "No output captured.") + '</pre>' +
+    webhook +
+    '<p class="quiet">Tail only, not the full log. Local SQLite · no account.</p>' +
+    '</article>';
+  const svg = document.querySelector("svg.chart");
+  if (svg && usedRows.length) bindChart(svg, usedRows);
+}
+function bindChart(svg, rows) {
+  svg.addEventListener("mousemove", (event) => {
+    const readout = document.getElementById("readout");
+    if (!readout || rows.length < 2) return;
+    const plot = ((event.offsetX / svg.clientWidth) * 720 - 54) / (720 - 54 - 16);
+    const index = Math.max(0, Math.min(rows.length - 1, Math.round(plot * (rows.length - 1))));
+    const row = rows[index];
+    readout.textContent = fmtWhen(row.ts) + " · " +
+      fmtGb(row.vram_used_mb) + " · " +
+      (row.power_w == null ? "—" : Math.round(row.power_w) + " W") + " · " +
+      (row.temp_c == null ? "—" : Math.round(row.temp_c) + "°C") + " · " +
+      (row.util_pct == null ? "—" : Math.round(row.util_pct) + "%");
+  });
+}
+async function loadDetail(id) {
+  const response = await fetch("/api/runs/" + id);
+  if (!response.ok) {
+    document.getElementById("main").innerHTML = '<p class="empty">That run is not in the ledger.</p>';
+    return;
+  }
+  const detail = await response.json();
+  if (!state.detail || !(detail.gpus || []).includes(state.gpu)) {
+    state.gpu = (detail.gpus && detail.gpus.length) ? detail.gpus[0] : 0;
+  }
+  const previous = state.detail;
+  const changed = !previous
+    || previous.run.id !== detail.run.id
+    || previous.samples.length !== detail.samples.length
+    || previous.run.status !== detail.run.status
+    || previous.run.stdout_tail !== detail.run.stdout_tail
+    || previous.run.stderr_tail !== detail.run.stderr_tail
+    || previous.run.webhook_status !== detail.run.webhook_status;
+  state.detail = detail;
+  if (changed) renderDetail(detail);
+}
+function selectRun(id) {
+  state.selectedId = id;
+  if (location.hash !== "#" + id) history.replaceState(null, "", "#" + id);
+  renderList();
+  loadDetail(id).catch(showError);
+}
+async function applyRuns(data) {
+  state.runs = data.runs || [];
+  state.meta = data.meta || state.meta;
+  renderMeta();
+  const hash = location.hash.replace("#", "");
+  if (hash && state.runs.some((run) => String(run.id) === hash)) state.selectedId = Number(hash);
+  if (!state.selectedId && state.runs.length) state.selectedId = state.runs[0].id;
+  if (state.selectedId && !state.runs.some((run) => run.id === state.selectedId)) {
+    state.selectedId = state.runs.length ? state.runs[0].id : null;
+  }
+  const signature = state.runs.map((run) => [
+    run.id, run.status, Math.round(run.duration_sec || 0), Math.round(run.peak_vram_mb || 0)
+  ].join(":")).join("|") + "|" + state.filter + "|" + state.selectedId;
+  if (signature !== state.listSignature) {
+    state.listSignature = signature;
+    renderList();
+  }
+  if (!state.runs.length) {
+    state.detail = null;
+    renderEmpty();
+    return;
+  }
+  await loadDetail(state.selectedId);
+}
+function showError(error) {
+  const node = document.getElementById("loaderr");
+  node.hidden = false;
+  node.textContent = "The dashboard lost the local API. Is runledger serve still running?";
+}
+async function tick() {
+  if (state.ticking) return;
+  state.ticking = true;
+  try {
+    const response = await fetch("/api/runs");
+    if (!response.ok) throw new Error("bad status");
+    document.getElementById("loaderr").hidden = true;
+    await applyRuns(await response.json());
+  } catch (error) {
+    showError(error);
+  } finally {
+    state.ticking = false;
+  }
+}
+function formBody() {
+  const form = document.getElementById("hook");
+  return {
+    webhook_url: form.webhook_url.value.trim(),
+    webhook_format: form.webhook_format.value,
+    notify_on: form.notify_on.value
+  };
+}
+function applySettings(settings) {
+  const form = document.getElementById("hook");
+  form.webhook_url.value = settings.webhook_url || "";
+  form.webhook_format.value = settings.webhook_format || "generic";
+  form.notify_on.value = settings.notify_on || "both";
+  document.getElementById("formatHint").textContent = HINTS[form.webhook_format.value] || "";
+}
+async function saveSettings() {
+  const response = await fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(formBody())
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Could not save");
+  return data;
+}
+document.getElementById("runlist").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-id]");
+  if (!button) return;
+  selectRun(Number(button.dataset.id));
+});
+document.querySelector(".filters").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-filter]");
+  if (!button) return;
+  state.filter = button.dataset.filter;
+  document.querySelectorAll("[data-filter]").forEach((el) => el.classList.toggle("on", el === button));
+  renderList();
+});
+document.getElementById("main").addEventListener("click", (event) => {
+  const metric = event.target.closest("[data-metric]");
+  if (metric && state.detail) {
+    state.metric = metric.dataset.metric;
+    renderDetail(state.detail);
+    return;
+  }
+  const log = event.target.closest("[data-log]");
+  if (log && state.detail) {
+    state.log = log.dataset.log;
+    renderDetail(state.detail);
+  }
+});
+document.getElementById("main").addEventListener("change", (event) => {
+  if (event.target.id === "gpu" && state.detail) {
+    state.gpu = Number(event.target.value);
+    renderDetail(state.detail);
+  }
+});
+document.getElementById("hook").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const msg = document.getElementById("hookmsg");
+  try {
+    const saved = await saveSettings();
+    msg.textContent = saved.webhook_url
+      ? "Saved. The next matching run will ping this URL."
+      : "Saved. No URL, so nothing is sent.";
+  } catch (error) {
+    msg.textContent = error.message;
+  }
+});
+document.getElementById("hook").webhook_format.addEventListener("change", (event) => {
+  document.getElementById("formatHint").textContent = HINTS[event.target.value] || "";
+});
+document.getElementById("ping").addEventListener("click", async () => {
+  const msg = document.getElementById("hookmsg");
+  msg.textContent = "Sending…";
+  try {
+    await saveSettings();
+    const response = await fetch("/api/notify/test", { method: "POST" });
+    const data = await response.json();
+    msg.textContent = data.ok
+      ? "Test ping delivered (HTTP " + data.status + ")."
+      : "Test ping failed: " + (data.error || data.status);
+  } catch (error) {
+    msg.textContent = error.message;
+  }
+});
+window.addEventListener("hashchange", () => {
+  const id = Number(location.hash.replace("#", ""));
+  if (id) selectRun(id);
+});
+fetch("/api/settings").then((response) => response.json()).then(applySettings).catch(() => {});
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>

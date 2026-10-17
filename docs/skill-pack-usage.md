@@ -32,3 +32,7 @@ Documents written before application code, in the pack's templates:
 The submission form asks for a short explanation of Skill Pack use. The paragraph below is the one to paste:
 
 > I installed the Devpost Learn Skill Pack with `npx skills add challengepost/learn-ai-basics --all -y` in an empty project and ran it in order. 1-start captured the learner profile. 2-scope, 3-prd, and 4-spec turned the Run Ledger idea into `devpost/scope.md`, `devpost/prd.md`, and `devpost/spec.md` before any application code. 5-build implemented that spec in working slices (wrap a command and record it, show it on the local dashboard, ping a webhook, then demo data and tests). The pack's rule was to plan before writing code and to keep the proof of concept to one loop: prefix a GPU job, keep the ending, optionally notify a chat bot.
+
+## Build and ship
+
+`5-build` is recorded in `devpost/checklist.md`. The slices were wrap-and-record, the local page, webhooks, then demo data and docs. `devpost/app-map.html` is the short map of that code. `DEMO.md` is the two-minute video script. `SUBMISSION.md` is a draft the submitter can edit; the form still has to be sent by a person, including the age-of-majority checkbox.

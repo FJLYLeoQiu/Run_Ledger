@@ -15,3 +15,4 @@ build/
 !.env.example
 /devpost/learner-profile.md
 agent-tools/
+.playwright-mcp/

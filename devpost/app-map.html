@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run Ledger — app map</title>
+<style>
+  body { margin: 0; font: 16px/1.5 Georgia, "Iowan Old Style", serif; background: #f4f0e6; color: #1c1914; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-weight: 500; letter-spacing: -0.03em; margin-bottom: 0; }
+  h2 { font-size: 1.15rem; margin-top: 2rem; }
+  p, li { font-family: "Segoe UI", sans-serif; }
+  code { font-family: ui-monospace, monospace; font-size: 0.92em; }
+  .note { color: #5c564c; }
+  svg { width: 100%; height: auto; background: #fff; border: 1px solid #ddd4c4; border-radius: 8px; }
+  details { background: #fff; border: 1px solid #ddd4c4; border-radius: 8px; padding: 8px 14px; margin: 8px 0; }
+  summary { cursor: pointer; font-family: "Segoe UI", sans-serif; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Run Ledger</h1>
+  <p class="note">A map of the proof of concept, not the product. Open the product with <code>runledger serve</code>. This page is a snapshot and can drift from later edits.</p>
+
+  <h2>What it is</h2>
+  <p>Run Ledger prefixes a command, writes the ending into a SQLite file on this computer, and shows that file on a local page. An optional POST fires when the job finishes or crashes. Pieces:</p>
+  <ul>
+    <li><strong>CLI</strong> — <code>src/runledger/cli.py</code> reads the command after <code>--</code>.</li>
+    <li><strong>Runner</strong> — <code>src/runledger/runner.py</code> starts the process, keeps the log tail, and asks the sampler.</li>
+    <li><strong>Sampler</strong> — <code>src/runledger/sampler.py</code> reads <code>nvidia-smi</code>, or builds a labeled demo curve.</li>
+    <li><strong>Store</strong> — <code>src/runledger/db.py</code> is the only SQL. One file, <code>~/.runledger/runs.sqlite</code>.</li>
+    <li><strong>Page</strong> — <code>src/runledger/server.py</code> plus <code>src/runledger/dashboard.html</code>.</li>
+    <li><strong>Webhook</strong> — <code>src/runledger/webhook.py</code>, only if a URL is saved.</li>
+  </ul>
+
+  <h2>One action, through the code</h2>
+  <p>You run <code>runledger -- python -c "print('runledger-ok')"</code> and the page shows that run. Reference route — follow it in the editor; it is not a claim that someone walked it live.</p>
+  <svg viewBox="0 0 720 220" role="img" aria-label="Command flows through the runner into SQLite, then to the page. The runner may also POST a webhook.">
+    <rect x="16" y="70" width="150" height="64" rx="8" fill="#1c1914"/>
+    <text x="91" y="98" text-anchor="middle" fill="#f4f0e6" font-size="13" font-family="sans-serif">runledger -- cmd</text>
+    <text x="91" y="116" text-anchor="middle" fill="#e2a04a" font-size="11" font-family="sans-serif">cli.py dispatch</text>
+    <rect x="220" y="70" width="160" height="64" rx="8" fill="#fff" stroke="#1c1914"/>
+    <text x="300" y="98" text-anchor="middle" font-size="13" font-family="sans-serif">runner.execute</text>
+    <text x="300" y="116" text-anchor="middle" fill="#5c564c" font-size="11" font-family="sans-serif">tail + samples</text>
+    <rect x="434" y="36" width="160" height="56" rx="8" fill="#fff" stroke="#1c1914"/>
+    <text x="514" y="68" text-anchor="middle" font-size="13" font-family="sans-serif">SQLite runs</text>
+    <rect x="434" y="124" width="160" height="56" rx="8" fill="#fff" stroke="#1c1914"/>
+    <text x="514" y="156" text-anchor="middle" font-size="13" font-family="sans-serif">webhook.py</text>
+    <rect x="620" y="36" width="84" height="56" rx="8" fill="#e2a04a"/>
+    <text x="662" y="68" text-anchor="middle" font-size="12" font-family="sans-serif">page</text>
+    <path d="M166 102 H220" stroke="#1c1914" stroke-width="1.5"/>
+    <path d="M380 96 H434" stroke="#1c1914" stroke-width="1.5"/>
+    <path d="M380 112 C410 112 410 152 434 152" fill="none" stroke="#1c1914" stroke-width="1.5"/>
+    <path d="M594 64 H620" stroke="#1c1914" stroke-width="1.5"/>
+  </svg>
+
+  <h2>Stops</h2>
+  <details open>
+    <summary>1. Where the command enters — <code>src/runledger/cli.py</code></summary>
+    <p>Search for <code>if command in ("--", "run")</code>. That branch passes the arguments after <code>--</code> to <code>runner.execute</code>. <code>serve</code> is the other door, into <code>server.serve</code>.</p>
+  </details>
+  <details open>
+    <summary>2. Where the ending is written — <code>src/runledger/runner.py</code></summary>
+    <p>Search for <code>def execute</code>. It inserts a running row, streams stdout and stderr, samples at the start and again when the process exits, then calls <code>webhook.maybe_notify</code>. The return value is the child's exit code.</p>
+  </details>
+  <details open>
+    <summary>3. Where the page reads it — <code>src/runledger/server.py</code> and <code>dashboard.html</code></summary>
+    <p>Search <code>server.py</code> for <code>/api/runs</code>. The HTML file fetches that JSON and draws the list and the chart. Same SQLite file as the CLI. No network asset.</p>
+  </details>
+
+  <h2>To change this, start here</h2>
+  <ul>
+    <li>Sample gap (default 3 seconds): <code>cli.py</code> <code>interval or 3.0</code>, and the wait inside <code>runner.execute</code>.</li>
+    <li>Empty-page sentence: <code>dashboard.html</code>, the string <code>Nothing recorded yet.</code></li>
+    <li>Bot message text: <code>webhook.py</code> <code>summary_lines</code>.</li>
+    <li>Shape of the fake history curves: <code>demo_data.py</code>.</li>
+  </ul>
+
+  <h2>A practice to reuse</h2>
+  <p>The product doc asked for a checkable result: a short command still produces a stored tail and at least one sample (<code>devpost/prd.md</code>, "Sample the GPU"). The runner therefore samples once up front and once at exit, because a <code>python -c</code> command can finish before a 3-second timer. <code>tests/test_runner.py</code> function <code>test_short_command_records_tail_and_sample</code> is the check. On the next project, write the done line as something you can see, then point one test at that line before adding a second feature.</p>
+
+  <h2>Run it again</h2>
+  <pre><code>python -m pip install -e .
+runledger -- python -c "print('runledger-ok')"
+runledger serve</code></pre>
+  <p class="note">On Linux the interpreter may be named <code>python3</code>. Commit: the revision that added this map. If the map and the code disagree, trust the code.</p>
+</main>
+</body>
+</html>
